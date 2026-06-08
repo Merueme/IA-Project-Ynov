@@ -180,6 +180,8 @@ footer{position:relative;z-index:1;background:var(--bg-card);border-top:1px soli
 </head>
 <body>
 
+
+
 <div class="stars-bg" id="stars"></div>
 
 <nav>
@@ -407,9 +409,9 @@ async function getAIQuizResult(){
   const profile=quizAnswers.map((a,qi)=>QUIZ_QUESTIONS[qi].opts[a]).join(', ');
   let expl='Votre sensibilité pour '+dest.tags[0].toLowerCase()+' et '+dest.tags[1].toLowerCase()+' fait de '+dest.name+' votre destination idéale. Une aventure sur mesure vous attend.';
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:180,system:'Tu es Chronos, guide de TimeTravel Agency. Génère une explication courte (2-3 phrases, style poétique et enthousiaste) pourquoi cette destination correspond à ce voyageur. En français. Sois concis et inspirant.',messages:[{role:'user',content:'Profil: '+profile+'. Destination: '+dest.name+' ('+dest.period+'). Explique pourquoi.'}]})});
-    const data=await resp.json();
-    if(data.content?.[0]?.text)expl=data.content[0].text;
+    const sysQ = 'Tu es Chronos, guide de TimeTravel Agency. Génère une explication courte (2-3 phrases, style poétique et enthousiaste) pourquoi cette destination correspond à ce voyageur. En français. Sois concis et inspirant.';
+    const reply = await callGemini(sysQ, 'Profil: '+profile+'. Destination: '+dest.name+' ('+dest.period+'). Explique pourquoi en 2-3 phrases poétiques.');
+    if(reply) expl = reply;
   }catch(e){}
   document.getElementById('quiz-area').innerHTML='<div class="quiz-result"><div class="result-badge">Votre destination idéale</div><img class="result-img" src="'+IMG[dest.id]+'" alt="'+dest.name+'"/><div class="result-dest">'+dest.name+'</div><div style="font-size:.78rem;color:var(--gold);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem">'+dest.period+'</div><div class="result-exp">'+expl+'</div><div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap"><button class="btn-primary" onclick="openModal(\''+dest.id+'\')">Découvrir →</button><button class="btn-secondary" onclick="initQuiz()">Recommencer</button></div></div>';
 }
@@ -433,11 +435,11 @@ async function sendChat(){
   document.getElementById('chat-messages').appendChild(td);
   chatHistory.push({role:'user',content:text});
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:280,system:'Tu es Chronos, assistant virtuel de TimeTravel Agency, agence de voyage temporel de luxe.\nRéponds TOUJOURS en français. Sois concis (max 3-4 phrases). Ton : professionnel, chaleureux, passionné d\'histoire.\nTu connais : Paris 1889 (Belle Époque, Tour Eiffel, 4890€, 7j) · Crétacé −65M (dinosaures, 8500€, 4j) · Florence 1504 (Renaissance, Michel-Ange, 5990€, 5j)',messages:chatHistory.slice(-8)})});
-    const data=await resp.json();
+    const sysC = 'Tu es Chronos, assistant virtuel de TimeTravel Agency, agence de voyage temporel de luxe. Réponds TOUJOURS en français. Sois concis (max 3-4 phrases). Ton : professionnel, chaleureux, passionné d\'histoire. Tu connais : Paris 1889 (Belle Époque, Tour Eiffel, 4890€, 7j) · Crétacé −65M (dinosaures, 8500€, 4j) · Florence 1504 (Renaissance, Michel-Ange, 5990€, 5j)';
+    const botReply = await callGemini(sysC, text, chatHistory.slice(-6));
     document.getElementById('typing-ind')?.remove();
-    addBotMsg(data.content?.[0]?.text||'Une perturbation temporelle. Réessayez !');
-    chatHistory.push({role:'assistant',content:data.content?.[0]?.text||''});
+    addBotMsg(botReply || 'Une perturbation temporelle. Réessayez !');
+    chatHistory.push({role:'assistant', content: botReply || ''});
   }catch(e){document.getElementById('typing-ind')?.remove();addBotMsg('Perturbation temporelle détectée. Réessayez dans un instant.');}
   btn.disabled=false;input.focus();
 }
@@ -449,6 +451,39 @@ function submitResa(){
   document.getElementById('resa-success').style.display='block';
   document.getElementById('resa-name-confirm').textContent=p+' '+n;
 }
+
+const GEMINI_API_KEY = 'AIzaSyAe_g6E89P9RdYiN_8zYJKEW7nVyeE40r8';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=';
+function getGeminiKey(){ return window._geminiKey || GEMINI_API_KEY; }
+
+async function callGemini(systemPrompt, userMessage, history=[]) {
+  const contents = [];
+  // inject system as first user turn if no history
+  if (history.length === 0) {
+    contents.push({role:'user', parts:[{text: systemPrompt + '\n\n' + userMessage}]});
+  } else {
+    // rebuild history with system prepended to first message
+    history.forEach((m, i) => {
+      if (i === 0) contents.push({role:'user', parts:[{text: systemPrompt + '\n\n' + m.content}]});
+      else contents.push({role: m.role === 'user' ? 'user' : 'model', parts:[{text: m.content}]});
+    });
+    contents.push({role:'user', parts:[{text: userMessage}]});
+  }
+  const resp = await fetch(GEMINI_URL + getGeminiKey(), {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      contents,
+      generationConfig: {maxOutputTokens: 300, temperature: 0.8}
+    })
+  });
+  const data = await resp.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+}
+
+
+}
+
 generateStars();renderDestinations();initQuiz();
 </script>
 </body>
