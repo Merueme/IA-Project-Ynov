@@ -60,31 +60,6 @@
 
 ---
 
-## 🚀 Déploiement
-
-### Option 1 — Netlify (recommandé, 0 clic)
-1. Aller sur [netlify.com](https://netlify.com) → créer un compte gratuit
-2. Glisser-déposer `index.html` dans la zone "Deploy manually"
-3. URL publique générée instantanément (ex: `random-name.netlify.app`)
-
-### Option 2 — GitHub Pages
-1. Créer un repo GitHub public
-2. Upload `index.html` → renommer en `index.html` à la racine
-3. Settings → Pages → Branch: main → Save
-4. URL : `https://[username].github.io/[repo-name]`
-
----
-
-## 📁 Structure du projet
-
-```
-timetravel-agency/
-├── index.html      ← Webapp complète (tout-en-un)
-└── README.md       ← Ce fichier
-```
-
----
-
 ## 📝 Prompts Documentés
 
 **Prompt principal (génération initiale) :**
@@ -95,13 +70,6 @@ timetravel-agency/
 
 **Prompt quiz IA :**
 > "Génère une explication 2-3 phrases (style poétique) pourquoi cette destination correspond à ce voyageur selon son profil."
-
----
-
-## 👥 Équipe
-
-Projet réalisé en groupe de 4 — M1/M2 Digital & IA  
-*Indiquer les noms et prénoms de tous les membres du groupe*
 
 ---
 
