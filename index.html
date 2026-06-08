@@ -412,7 +412,7 @@ async function getAIQuizResult(){
     const sysQ = 'Tu es Chronos, guide de TimeTravel Agency. Génère une explication courte (2-3 phrases, style poétique et enthousiaste) pourquoi cette destination correspond à ce voyageur. En français. Sois concis et inspirant.';
     const reply = await callGemini(sysQ, 'Profil: '+profile+'. Destination: '+dest.name+' ('+dest.period+'). Explique pourquoi en 2-3 phrases poétiques.');
     if(reply) expl = reply;
-  }catch(e){}
+  }catch(e){console.error('Quiz Gemini error:',e);}
   document.getElementById('quiz-area').innerHTML='<div class="quiz-result"><div class="result-badge">Votre destination idéale</div><img class="result-img" src="'+IMG[dest.id]+'" alt="'+dest.name+'"/><div class="result-dest">'+dest.name+'</div><div style="font-size:.78rem;color:var(--gold);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem">'+dest.period+'</div><div class="result-exp">'+expl+'</div><div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap"><button class="btn-primary" onclick="openModal(\''+dest.id+'\')">Découvrir →</button><button class="btn-secondary" onclick="initQuiz()">Recommencer</button></div></div>';
 }
 
@@ -438,9 +438,13 @@ async function sendChat(){
     const sysC = 'Tu es Chronos, assistant virtuel de TimeTravel Agency, agence de voyage temporel de luxe. Réponds TOUJOURS en français. Sois concis (max 3-4 phrases). Ton : professionnel, chaleureux, passionné d\'histoire. Tu connais : Paris 1889 (Belle Époque, Tour Eiffel, 4890€, 7j) · Crétacé −65M (dinosaures, 8500€, 4j) · Florence 1504 (Renaissance, Michel-Ange, 5990€, 5j)';
     const botReply = await callGemini(sysC, text, chatHistory.slice(-6));
     document.getElementById('typing-ind')?.remove();
-    addBotMsg(botReply || 'Une perturbation temporelle. Réessayez !');
-    chatHistory.push({role:'assistant', content: botReply || ''});
-  }catch(e){document.getElementById('typing-ind')?.remove();addBotMsg('Perturbation temporelle détectée. Réessayez dans un instant.');}
+    if(botReply){
+      addBotMsg(botReply);
+      chatHistory.push({role:'assistant', content: botReply});
+    } else {
+      addBotMsg('Réponse vide de Gemini — vérifiez la console (F12) pour le détail.');
+    }
+  }catch(e){document.getElementById('typing-ind')?.remove();console.error('Chat error:',e);addBotMsg('Erreur réseau: '+e.message+' — vérifiez la console F12.');}
   btn.disabled=false;input.focus();
 }
 function sendSugg(el){document.getElementById('chat-input').value=el.textContent;sendChat();}
@@ -453,32 +457,59 @@ function submitResa(){
 }
 
 const GEMINI_API_KEY = 'AIzaSyAe_g6E89P9RdYiN_8zYJKEW7nVyeE40r8';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=';
-function getGeminiKey(){ return window._geminiKey || GEMINI_API_KEY; }
 
 async function callGemini(systemPrompt, userMessage, history=[]) {
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-latest:generateContent?key=' + GEMINI_API_KEY;
+
+  // Build contents: system injected as first user message
   const contents = [];
-  // inject system as first user turn if no history
-  if (history.length === 0) {
-    contents.push({role:'user', parts:[{text: systemPrompt + '\n\n' + userMessage}]});
-  } else {
-    // rebuild history with system prepended to first message
-    history.forEach((m, i) => {
-      if (i === 0) contents.push({role:'user', parts:[{text: systemPrompt + '\n\n' + m.content}]});
-      else contents.push({role: m.role === 'user' ? 'user' : 'model', parts:[{text: m.content}]});
+
+  // Add conversation history (skip first if we'll prepend system)
+  if (history.length > 0) {
+    history.forEach(m => {
+      contents.push({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{text: m.content}]
+      });
     });
-    contents.push({role:'user', parts:[{text: userMessage}]});
   }
-  const resp = await fetch(GEMINI_URL + getGeminiKey(), {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      contents,
-      generationConfig: {maxOutputTokens: 300, temperature: 0.8}
-    })
+
+  // Always add current user message with system context
+  contents.push({
+    role: 'user',
+    parts: [{text: systemPrompt + '\n\n' + userMessage}]
   });
-  const data = await resp.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        contents: contents,
+        systemInstruction: {parts: [{text: systemPrompt}]},
+        generationConfig: {maxOutputTokens: 300, temperature: 0.8}
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.error('Gemini HTTP error:', resp.status, err);
+      return null;
+    }
+
+    const data = await resp.json();
+    console.log('Gemini response:', data);
+
+    if (data.error) {
+      console.error('Gemini API error:', data.error);
+      return null;
+    }
+
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch(e) {
+    console.error('Gemini fetch error:', e);
+    return null;
+  }
 }
 
 
