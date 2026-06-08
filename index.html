@@ -459,7 +459,16 @@ function submitResa(){
 const GEMINI_API_KEY = 'AIzaSyAe_g6E89P9RdYiN_8zYJKEW7nVyeE40r8';
 
 async function callGemini(systemPrompt, userMessage, history=[]) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-latest:generateContent?key=' + GEMINI_API_KEY;
+  // Try models in order until one works
+  const MODELS = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-pro',
+    'gemini-1.0-pro'
+  ];
+  const model = window._workingModel || MODELS[0];
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + GEMINI_API_KEY;
 
   // Build contents: system injected as first user message
   const contents = [];
@@ -501,9 +510,21 @@ async function callGemini(systemPrompt, userMessage, history=[]) {
     console.log('Gemini response:', data);
 
     if (data.error) {
-      console.error('Gemini API error:', data.error);
+      console.error('Gemini API error:', data.error.message);
+      // Try next model automatically
+      if (data.error.code === 404) {
+        const MODELS = ['gemini-2.0-flash','gemini-1.5-flash','gemini-1.5-flash-latest','gemini-pro','gemini-1.0-pro'];
+        const idx = MODELS.indexOf(model);
+        if (idx < MODELS.length - 1) {
+          window._workingModel = MODELS[idx + 1];
+          console.log('Trying next model:', window._workingModel);
+          return callGemini(systemPrompt, userMessage, history);
+        }
+      }
       return null;
     }
+    // Save working model
+    window._workingModel = model;
 
     return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
   } catch(e) {
